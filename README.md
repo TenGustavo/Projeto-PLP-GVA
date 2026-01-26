@@ -78,6 +78,6 @@ O valor é exibido tanto na escala padrão quanto multiplicado por 1000.
 Na raiz do projeto, execute:
 
 ```bash
-ghc src/Main.hs -o gva
+ghc -isrc src/Main.hs -o gva
 ./gva
 
