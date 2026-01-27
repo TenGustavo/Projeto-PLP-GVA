@@ -1,61 +1,74 @@
 module Main where
 
 import Types
-import Persistence (carregar)
+import Persistence (carregar, salvar)
 import Disciplinas (moduloDisciplinas)
 import Atividades (moduloAtividades)
 import Horarios (moduloHorarios)
 
--- | Função principal
 main :: IO ()
 main = do
-  putStrLn "======================================="
-  putStrLn "  GVA - Gerenciador de Vida Acadêmica"
-  putStrLn "======================================="
+  st <- carregar
+  loopPrincipal st
 
-  estadoInicial <- carregar
-  loopPrincipal estadoInicial
-
-
--- | Loop principal do sistema
 loopPrincipal :: Estado -> IO ()
-loopPrincipal estado = do
-  opcao <- menu "Menu Principal"
-    [ "Sair"
-    , "Disciplinas"
-    , "Atividades"
-    , "Horários"
-    , "Calcular IRA"
-    ]
+loopPrincipal st = do
+  putStrLn ""
+  putStrLn "=== Gerenciador de Vida Acadêmica (GVA) - CLI ==="
+  putStrLn "(Persistência: gva.db)"
+  mostrarAlertasSimples st
 
-  case opcao of
-    0 -> sair
-    1 -> moduloDisciplinas estado >>= loopPrincipal
-    2 -> moduloAtividades estado >>= loopPrincipal
-    3 -> moduloHorarios estado >>= loopPrincipal
+  op <- menu "Menu Principal"
+        [ "Sair"
+        , "Disciplinas"
+        , "Atividades/Trabalhos"
+        , "Agenda (não implementada detalhadamente)"
+        , "Desempenho (IRA UFCG)"
+        , "Notificações (configurar antecedência)"
+        , "Horários (com bloqueio de choque)"
+        ]
+
+  case op of
+    0 -> do
+      salvar st
+      putStrLn "Estado salvo. Encerrando."
+    1 -> moduloDisciplinas st >>= loopPrincipal
+    2 -> moduloAtividades st >>= loopPrincipal
+    3 -> do
+      putStrLn "Agenda: para manter simples, ficou como melhoria futura."
+      loopPrincipal st
     4 -> do
-           mostrarIRA estado
-           loopPrincipal estado
-    _ -> do
-           putStrLn "Opção inválida."
-           loopPrincipal estado
+      putStrLn ""
+      putStrLn "=== Desempenho: IRA UFCG (Individual) ==="
+      let ira = iraIndividual (disciplinas st)
+      putStrLn ("IRA (escala ~0..10): " ++ show ira)
+      putStrLn ("IRA x 1000 (formato comum): " ++ show (ira * 1000))
+      putStrLn "Obs: só entra no IRA quem tem Nota Final (Ni) e Período (Pi)."
+      loopPrincipal st
+    5 -> do
+      st' <- configurarNotificacoes st
+      loopPrincipal st'
+    6 -> moduloHorarios st >>= loopPrincipal
+    _ -> putStrLn "Opção inválida." >> loopPrincipal st
 
+mostrarAlertasSimples :: Estado -> IO ()
+mostrarAlertasSimples st = do
+  let pendentes = [ a | a <- atividades st, aStatus a /= Concluido ]
+  if null pendentes
+    then pure ()
+    else do
+      putStrLn ""
+      putStrLn "ALERTAS (simples): atividades não concluídas:"
+      mapM_ (\a -> putStrLn ("- [" ++ show (aStatus a) ++ "] "
+                             ++ aTitulo a ++ " (prazo: " ++ aPrazo a ++ ")"))
+            (take 5 pendentes)
 
--- | Exibe o IRA do aluno
-mostrarIRA :: Estado -> IO ()
-mostrarIRA estado = do
-  let ira = iraIndividual (disciplinas estado)
+configurarNotificacoes :: Estado -> IO Estado
+configurarNotificacoes st = do
   putStrLn ""
-  putStrLn "===== IRA (Índice de Rendimento Acadêmico) ====="
-  putStrLn ("IRA: " ++ show ira)
-  putStrLn ("IRA x 1000: " ++ show (ira * 1000))
-  putStrLn "==============================================="
-
-
--- | Encerra o programa
-sair :: IO ()
-sair = do
-  putStrLn ""
-  putStrLn "Encerrando o sistema..."
-  putStrLn "Até logo!"
-
+  putStrLn ("Antecedência atual (horas): " ++ show (pAntecedenciaHoras (prefs st)))
+  h <- promptInt "Nova antecedência em horas (ex: 48): "
+  let st' = st { prefs = (prefs st) { pAntecedenciaHoras = h } }
+  salvar st'
+  putStrLn "Preferência salva."
+  pure st'
